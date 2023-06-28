@@ -32,6 +32,13 @@ Shadow Map 是一张有分辨率 FrameBuffer，所以会因为采样精度的问
 
 <div align="center"><img src="./assets/Figure/Cascaded_Shadow_Map.png" width = "45%" ></div>
 
+CSM 的实现主要分为以下几步：
+
+1. 沿着相机中心轴将视锥切成多个视锥；
+2. 给光线为每一个子视锥都建立一个视图投影矩阵（View-Projection Matrix）；
+3. 在子视锥上渲染一个 Shadow Map；
+4. 在着色器中，确定片段位于哪个级联中，并使用相应的 Shadow Map 和视图投影来计算阴影值；
+
 另一种直观且行之有效的方法便是过滤，也就是下文提到的 PCF。
 
 ## 软阴影
