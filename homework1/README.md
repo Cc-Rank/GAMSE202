@@ -9,6 +9,9 @@
 
 - 第一个 Pass 先从光源点作为 camera 视角渲染出一个深度图，也就是 Shadow Map，
 - 第二个 Pass 再从当前摄像机渲染最终得到的场景，在渲染场景时，把像素点变换到光源空间中，并将物体在光源空间的深度值与 Shadow Map 中同一个 uv 坐标记录的深度做对比，如果大于 Shadow Map 中记录的值，则表明该点被其他物体遮挡，也就是在阴影中。
+
+### 自遮挡
+
 但简单的 Shadow Mapping 在实现中通常会遇到一个叫做自遮挡的问题。
 
 <div align="center"><img src="./assets/Figure/Shadow_Acne.png" width = "45%" ><img src="./assets/Figure/Self_Occlusion.png" width = "41%" ></div>
@@ -21,11 +24,21 @@
 
 <div align="center"><img src="./assets/Figure/Used_Bias.png" width = "45%" ></div>
 
+### 走样
+
+Shadow Map 是一张有分辨率 FrameBuffer，所以会因为采样精度的问题产生走样现象。一个解决阴影出现的 Perspective Aliasing（透视走样）问题，几乎称得上是最佳的方法便是级联阴影贴图 （Cascaded Shadow Maps）。
+
+直观上可以想象到，当眼睛非常接近几何图形时，需要图形有着更高的分辨率。而当集合图形距离眼镜很远时，对分辨率的要求也就变得更低一些。因此 CSM 便是根据相机视锥的不同区域，记录具有不同分辨率的 Shadow Map。与距离较远的对象相比，最靠近眼睛的对象需要更高的分辨率。
+
+<div align="center"><img src="./assets/Figure/Cascaded_Shadow_Map.png" width = "45%" ></div>
+
+另一种直观且行之有效的方法便是过滤，也就是下文提到的 PCF。
+
 ## 软阴影
 
 ### Percentage-Closer Filtering PCF
 
-Shadow Map 是一张有分辨率 FrameBuffer，所以会因为采样精度的问题产生走样现象。PCF 把在 Shadow Map 采样后做深度比较的结果相加后进行平均，得到一个模糊的结果，把这个模糊的结果作为 visibility 项，即可使得阴影边界变得柔和。
+PCF 把在 Shadow Map 采样后做深度比较的结果相加后进行平均，得到一个模糊的结果，把这个模糊的结果作为 visibility 项，即可使得阴影边界变得柔和。
 
 PCF 一开始是用于阴影抗锯齿上，后来人们发现可以用来实现软阴影，采样范围越大，阴影越“软”。其主要方式是在计算着色点与 Shadow Map 中该点深度值的比较的时候，不仅采样该像素点的深度值，同时采样周边多个 Shadow Map 点深度值，逐一比较并求平均值，从而获得了一个从 0 到 1 的连续分布，能够表现不同明暗程度的阴影。
 
@@ -33,12 +46,12 @@ PCF 一开始是用于阴影抗锯齿上，后来人们发现可以用来实现�
 
 如下图对于着色点 $x$，我们比较 $x$ 的 $z$ 轴值和周围一系列点的 Shadow Map 中的值，并将比较得到的结果（0 或 1）求平均，即为 $x$ 点阴影的 visibility 项。
 
-<div align="center"><img src="./assets/Figure/pcf.png" width = "45%" ></div>
+<div align="center"><img src="./assets/Figure/PCF.png" width = "45%" ></div>
 
 这种求平均的计算方式用数学的***卷积/滤波***表达式来表示为：
 
 $$
-[w * f](p) = \sum_{q \in \mathcal N(p)} w(p, q)f(q)
+\left[w * f\right] (p) = \sum_{q \in \mathcal N(p)} w(p, q)f(q)
 $$
 
 $\mathcal{N}(p)$是 $p$ 点的邻域， $w(p, q)$ 表示任一邻域采样点 $q$ 对 $p$ 的权重，$f(q)$ 表示该位置的值。
@@ -46,7 +59,7 @@ $\mathcal{N}(p)$是 $p$ 点的邻域， $w(p, q)$ 表示任一邻域采样点 $q
 在 PCF 中有：
 
 $$
-V(x) = \sum_{q \in \mathcal N(x)} w(x, q) \cdot \chi^+[D_{SM}(q) - D_{scene}(x)]
+V(x) = \sum_{q \in \mathcal N(x)} w(x, q) \cdot \chi^+\left[D_{SM}(q) - D_{scene}(x)\right]
 $$
 
 通常情况下我们的采样图案已经包含了重要性条件（本文使用的是 [泊松圆盘采样](https://codepen.io/arkhamwjz/pen/MWbqJNG?editors=1010) 或泊松均匀采样），所以这个权重值可以忽略。在这个表达式中， $\chi^+$ 函数表示一个非 0 即 1 的值，表示 Shadow Map 上的 $q$ 点深度值大于场景中 $x$ 点深度的时候表示该点不存在遮挡，即返回 1 表示可见，否则返回 0。
@@ -85,7 +98,7 @@ $$
 
 其中 $w_{Penumbra}$ 表示 PCF 采样范围， $d_{Receiver}$ 表示着色点与平均遮挡物（后续会说计算方法）的距离， $d_{Blocker}$ 表示光源与平均遮挡物的距离， $w_{Light}$ 表示面光源的范围（只有面光源会生成软阴影）。此处上下由于是两个相似三角形，其直角边的比例和长边比例一致，所以可以直接计算与平面的距离而不用真的算出着色点的距离。
 
-在上述公式中，$d_{Receiver}$ 的深度是已知的，$w_{Light}$ 的大小是预先设定的，那么剩下的是平均遮挡物的深度 $d_{Blocker}$ 了。为此，我们使用了一个从着色点出发向面光源的视锥，这个视锥会在该光源生成的 Shadow Map（通常位于光源的近平面上）中圈出一片范围，则这部分范围内的深度值将会用来采样并计算平均遮挡物距离。
+在上述公式中， $d_{Receiver}$ 的深度是已知的， $w_{Light}$ 的大小是预先设定的，那么剩下的是平均遮挡物的深度 $d_{Blocker}$ 了。为此，我们使用了一个从着色点出发向面光源的视锥，这个视锥会在该光源生成的 Shadow Map（通常位于光源的近平面上）中圈出一片范围，则这部分范围内的深度值将会用来采样并计算平均遮挡物距离。
 
 ![$d_{Blocker}$](./assets/Figure/d_Blocker.png "D Blocker")
 
@@ -138,6 +151,28 @@ VSM 在为 PCSS 算法提高效率的过程中使用了很多假设的分布条�
 存储前四阶矩只需要四通道贴图即可，但是用四阶矩来恢复这个CDF涉及到很复杂的数学推导问题。VSM效果如图：
 
 ![Moment Shadow Mapping](./assets/Figure/Moment_Shadow_Mapping.png "Moment Shadow Mapping")
+
+## 距离场阴影
+
+自有向距离场（Signed Distance Field, SDF）被提出以来，其相关概念被迅速应用至图形学的各个领域中。
+
+数学上来说，SDF 是定义在空间中的一个标量场，标量值为空间一点到曲面的距离。曲面外的点为正值，曲面上的点为 0，曲面内的点为负数。对于需要渲染的 3d 场景来说，我们需要计算它到场景中所有物体的最近距离，来生成 Distance Field。
+
+而有向距离场在阴影中的应用主要是根据 [Ray Marching](https://en.wikipedia.org/wiki/Volume_ray_casting) 来确定当前像素被遮挡的百分比。
+
+<div align="center"><img src="./assets/Figure/SDF.png" width = "45%" ></div>
+
+从当前点出发，向光源中心射出一条射线，并记录步进过程中最小的“安全距离”，也就是距离场中记录的值，这个值表示从 $p$ 点到切线的距离。由此，可以根据这个距离的大小，来算出切线到射线的夹角 $\theta$，而 $\theta$ 的值越小，当前点的“安全角度”也就越小，即被遮挡的部分也就越多。从而我们便可以根据 $\theta$ 与 点 $o$ 到点 $p$ 的距离来近似的出当前点的 visibility 项。
+
+$$
+V(x) \approx \min{\left\{ \frac{k \cdot SDF(p)}{|p - o|}\right\}}
+$$
+
+其中参数 $k$ 和上界 $1.0$ 用来控制阴影的软硬程度。 $\frac{k \cdot SDF(p)}{|p - o|}$ 的取值范围在 $[0, 1]$ 区间内，因此当 $k$ 值越大时，也就更早的到达上界 $1.0$ ，从而实现出硬阴影。如下图所示不同 $k$ 值的结果。
+
+<div align="center"><img src="./assets/Figure/k2.png" width = "33%" ><img src="./assets/Figure/k8.png" width = "33%" ><img src="./assets/Figure/k32.png" width = "33%" ></div>
+
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp; $k = 2$ &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp; $k = 8$ &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp; $k = 32$
 
 ## Reference
 
