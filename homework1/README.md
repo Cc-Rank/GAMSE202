@@ -74,7 +74,7 @@ $$
 因此，PCF 不是对 Shadow Map 存储的深度做滤波，这没有任何的物理意义，所得到的最终结果也仍然是一个非 0 即 1 的值：
 
 $$
-V(x) \neq \chi^+ \{\left[w(x, q) \cdot D_{SM}\right] (q) - D_{scene}(x) \}
+V(x) \neq \chi^+ \left\{ \left[w(x, q) \cdot D_{SM}\right] (q) - D_{scene}(x) \right\}
 $$
 
 也不是对最终形成的硬阴影做滤波：
