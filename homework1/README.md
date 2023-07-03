@@ -107,7 +107,7 @@ $$
 
 在上述公式中， $d_{Receiver}$ 的深度是已知的， $w_{Light}$ 的大小是预先设定的，那么剩下的是平均遮挡物的深度 $d_{Blocker}$ 了。为此，我们使用了一个从着色点出发向面光源的视锥，这个视锥会在该光源生成的 Shadow Map（通常位于光源的近平面上）中圈出一片范围，则这部分范围内的深度值将会用来采样并计算平均遮挡物距离。
 
-![$d_{Blocker}$](./assets/Figure/d_Blocker.png "D Blocker")
+<div align="center"><img src="./assets/Figure/d_Blocker.png" width = "65%" ></div>
 
 PCSS 的整体步骤主要分为三步：
 
@@ -133,7 +133,7 @@ PCSS 的整体步骤主要分为三步：
 
 已知区域的均值和方差，以及着色点深度值，就能通过切比雪夫不等式来近似计算出可见程度 $(x > t)$。所有的计算都是 $O(1)$ 时间，且不用采样或循环，但是切比雪夫本身带有近似性质。
 
-![Chebyshev 不等式](./assets/Figure/Chebyshev.png "Chebyshev 不等式")
+<div align="center"><img src="./assets/Figure/Chebyshev.png" width = "65%" ></div>
 
 #### step1 加速
 
